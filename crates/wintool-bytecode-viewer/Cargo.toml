@@ -1,0 +1,8 @@
+[package]
+name = "wintool-bytecode-viewer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+winapi =  { version = "0.3.9", features = ["winnt", "winbase", "handleapi", "psapi", "memoryapi"] }
+garygo-jass-common = { path = "../garygo-jass-common", version = "0.1.0" }
