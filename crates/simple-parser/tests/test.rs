@@ -24,8 +24,10 @@ mod test {
 
     #[test]
     fn test_blizzardj() -> Result<()> {
-        let input_str = include_str!("blizzard.j");
-        let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+        let commonj = include_str!("common.j");
+        let blizzardj = include_str!("blizzard.j");
+        let input_str = format!("{commonj}\n{blizzardj}");
+        let mut parse = Parse::test_instance(Cursor::new(input_str.as_str()))?;
         parse.file()?;
         parse.show();
         Ok(())
