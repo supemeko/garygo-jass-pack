@@ -14,6 +14,7 @@ pub struct ScriptType {
     name: String,
     extends: String,
     base: BytecodeValueType,
+    array: bool,
 }
 
 impl Debug for ScriptType {
@@ -98,6 +99,14 @@ impl<R: Read> Parse<R> {
     fn guess(&mut self, guess: &Token) -> Result<bool> {
         let token = self.lex.peek()?;
         Ok(token == guess)
+    }
+
+    fn guess_and_consume(&mut self, guess: &Token) -> Result<bool> {
+        let guess = self.guess(guess)?;
+        if guess {
+            self.next()?;
+        }
+        Ok(guess)
     }
 
     fn expect_consume(&mut self, expect: &Token) -> Result<()> {
@@ -335,11 +344,45 @@ impl<R: Read> Parse<R> {
                 } else {
                     // var
                     let symbol = self.symbol_index(i.as_str())?;
-                    let symbol = SymbolId(symbol as u32);
-                    let var_type = self.get_var_type(symbol)?.clone();
-                    let reg = self.next_reg();
-                    self.bytecodes
-                        .push(Bytecode::SetRegVar(reg.into(), var_type.base, symbol));
+                    let var_symbol = SymbolId(symbol as u32);
+                    let var_type = self.get_var_type(var_symbol)?.clone();
+
+                    let array = self.guess(&Token::SqurL)?;
+                    if var_type.array != array {
+                        if array {
+                            return Err(format!(
+                                "cannot index a non-array value: {}",
+                                var_type.name
+                            )
+                            .into());
+                        } else {
+                            return Err(format!(
+                                "Assigning an array to a variable is not allowed: {}",
+                                var_type.name
+                            )
+                            .into());
+                        }
+                    }
+
+                    let reg = if array {
+                        let exp = self.expression(0)?;
+                        let reg = self.next_reg();
+                        self.bytecodes.push(Bytecode::SetRegVarArray(
+                            reg.into(),
+                            exp.pos.into(),
+                            var_type.base,
+                            var_symbol,
+                        ));
+                        reg
+                    } else {
+                        let reg = self.next_reg();
+                        self.bytecodes.push(Bytecode::SetRegVar(
+                            reg.into(),
+                            var_type.base,
+                            var_symbol,
+                        ));
+                        reg
+                    };
 
                     Exp {
                         exp_type: var_type,
@@ -487,10 +530,21 @@ impl<R: Read> Parse<R> {
         self.expect_consume(&Token::Set)?;
 
         // var
-        let (var_index, _) = self.next_symbol()?;
-        let token = self.peek()?;
-        let array_index = if token == &Token::SqurL {
-            self.next()?;
+        let (var_index, var_name) = self.next_symbol()?;
+        let var = self.get_var_type(SymbolId(var_index as u32))?.clone();
+        let array = self.guess_and_consume(&Token::SqurL)?;
+        if var.array != array {
+            if var.array {
+                return Err(
+                    format!("try set array variable into a nonarray variable: {var_name}").into(),
+                );
+            } else {
+                assert!(array);
+                return Err(format!("try set nonarray variable into a array: {var_name}").into());
+            }
+        }
+
+        let array_index = if array {
             let exp = self.expression(0)?;
             self.expect_consume(&Token::SqurR)?;
             Some(exp.pos)
@@ -498,7 +552,7 @@ impl<R: Read> Parse<R> {
             None
         };
 
-        // =
+        // '='
         self.expect_consume(&Token::Assign)?;
 
         // var
@@ -595,10 +649,27 @@ impl<R: Read> Parse<R> {
 
         // type
         let (type_index, type_name) = self.next_symbol()?;
-        let script_type = match self.types.get(&type_index) {
+        let mut script_type = match self.types.get(&type_index) {
             Some(st) => st.clone(),
             None => return Err(format!("not found type: {type_name}").into()),
         };
+
+        let array = self.guess_and_consume(&Token::Array)?;
+        if array {
+            script_type.array = true;
+            if !matches!(
+                script_type.base,
+                BytecodeValueType::Integer
+                    | BytecodeValueType::Real
+                    | BytecodeValueType::String
+                    | BytecodeValueType::Boolean
+                    | BytecodeValueType::Handle
+            ) {
+                return Err("var array only int, real, string, boolean, handle".into());
+            }
+        }
+
+        // self.expect_consume(&Token::Assign)?;
 
         // var
         let var_index = self.next_symbol()?.0;
@@ -606,11 +677,13 @@ impl<R: Read> Parse<R> {
         self.bytecodes.push(bytecode);
         self.set_var_type(SymbolId(var_index as u32), script_type);
 
-        if !self.guess(&Token::Assign)? {
+        if !self.guess_and_consume(&Token::Assign)? {
             // 只定义变量不赋值
             return Ok(());
-        } else {
-            self.next()?;
+        }
+
+        if array {
+            return Err("array is not allow init".into());
         }
 
         let exp = self.expression(0)?;
@@ -652,6 +725,7 @@ impl<R: Read> Parse<R> {
                 name: derived.1.clone(),
                 extends: base.name.clone(),
                 base: base.base.clone(),
+                array: false,
             },
         );
         self.bytecodes.push(Bytecode::Type(derived.0.into()));
@@ -737,6 +811,7 @@ impl<R: Read> Parse<R> {
                 name: symbol.to_string(),
                 extends: "".to_string(),
                 base,
+                array: false,
             },
         );
         Ok(self)
