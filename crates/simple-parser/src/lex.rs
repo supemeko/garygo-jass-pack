@@ -255,7 +255,7 @@ impl<R: Read> Lex<R> {
             };
 
             match ch {
-                b' ' | b'\n' | b'\t' | b',' | b'(' | b')' => break,
+                b' ' | b'\n' | b'\t' | b',' | b'(' | b')' | b'=' => break,
                 _ => {
                     self.next_byte()?;
                     name.push(ch as char);
