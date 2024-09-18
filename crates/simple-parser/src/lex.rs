@@ -156,7 +156,7 @@ impl<R: Read> Lex<R> {
                 }
             };
             match ch {
-                b'0'..b'9' => {
+                b'0'..=b'9' => {
                     self.next_byte()?;
                     str.push(ch as char);
                 }
@@ -306,8 +306,8 @@ impl<R: Read> Lex<R> {
         };
         let token = match ch {
             b' ' | b'\n' | b'\t' => self.next_token()?,
-            b'0'..b'9' => self.read_number(ch)?,
-            b'a'..b'z' | b'_' | b'A'..b'Z' => self.read_name(ch)?,
+            b'0'..=b'9' => self.read_number(ch)?,
+            b'a'..=b'z' | b'_' | b'A'..=b'Z' => self.read_name(ch)?,
             b'\'' => self.read_snumber(ch)?,
             b'\"' => self.read_str(ch)?,
             b'+' => Token::Add,
@@ -434,5 +434,23 @@ fn test_str() -> Result<()> {
     let mut lex = Lex::new(Cursor::new(n));
     assert_eq!(lex.next()?, Token::String("12345".as_bytes().to_vec()));
     assert_eq!(lex.next()?, Token::String(vec![]));
+    Ok(())
+}
+
+#[test]
+fn test_number_and_char() -> Result<()> {
+    use std::io::Cursor;
+
+    let n = "constant integer abcdefghijklmnopqrstuvwxyz = 1234567890";
+    let mut lex = Lex::new(Cursor::new(n));
+    assert_eq!(lex.next()?, Token::Constant);
+    assert_eq!(lex.next()?, Token::Name("integer".into()));
+    assert_eq!(
+        lex.next()?,
+        Token::Name("abcdefghijklmnopqrstuvwxyz".into())
+    );
+    assert_eq!(lex.next()?, Token::Assign);
+    assert_eq!(lex.next()?, Token::Integer(1234567890));
+    assert_eq!(lex.next()?, Token::Eos);
     Ok(())
 }
