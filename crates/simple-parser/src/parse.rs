@@ -256,6 +256,19 @@ impl<R: Read> Parse<R> {
     fn expression(&mut self, op_priority: isize) -> Result<Exp> {
         let token = self.next()?;
         let left = match token {
+            Token::True | Token::False => {
+                let reg = self.next_reg();
+                self.bytecodes.push(Bytecode::SetRegLiteral(
+                    reg.into(),
+                    BytecodeValueType::Boolean,
+                    if token == Token::True { 1 } else { 0 },
+                ));
+                Exp {
+                    exp_type: self.typeinfo("boolean")?,
+                    pos: reg,
+                    priority: 0,
+                }
+            }
             Token::Integer(i) => {
                 let reg = self.next_reg();
                 self.bytecodes.push(Bytecode::SetRegLiteral(
