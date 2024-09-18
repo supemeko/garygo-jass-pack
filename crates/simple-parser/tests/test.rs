@@ -21,4 +21,13 @@ mod test {
         parse.show();
         Ok(())
     }
+
+    #[test]
+    fn test_blizzardj() -> Result<()> {
+        let input_str = include_str!("blizzard.j");
+        let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+        parse.file()?;
+        parse.show();
+        Ok(())
+    }
 }

@@ -215,7 +215,7 @@ impl<R: Read> Lex<R> {
                 };
 
                 match ch {
-                    b'\n' => break,
+                    b'\n' | b'\r' => break,
                     _ => {}
                 }
             }
@@ -255,7 +255,7 @@ impl<R: Read> Lex<R> {
             };
 
             match ch {
-                b' ' | b'\n' | b'\t' | b',' | b'(' | b')' | b'=' => break,
+                b' ' | b'\n' | b'\r' | b'\t' | b',' | b'(' | b')' | b'=' => break,
                 _ => {
                     self.next_byte()?;
                     name.push(ch as char);
@@ -305,7 +305,7 @@ impl<R: Read> Lex<R> {
             None => return Ok(Token::Eos),
         };
         let token = match ch {
-            b' ' | b'\n' | b'\t' => self.next_token()?,
+            b' ' | b'\n' | b'\r' | b'\t' => self.next_token()?,
             b'0'..=b'9' => self.read_number(ch)?,
             b'a'..=b'z' | b'_' | b'A'..=b'Z' => self.read_name(ch)?,
             b'\'' => self.read_snumber(ch)?,
