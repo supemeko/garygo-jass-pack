@@ -81,7 +81,7 @@ impl<R: Read> Parse<R> {
             functions: HashMap::new(),
             natives: HashMap::new(),
             var_type: HashMap::new(),
-            reg: 0x10,
+            reg: 0x00,
         }
     }
 
@@ -146,7 +146,11 @@ impl<R: Read> Parse<R> {
     }
 
     fn next_reg(&mut self) -> u8 {
-        self.reg += 1;
+        if self.reg == u8::MAX {
+            self.reg = 1
+        } else {
+            self.reg += 1;
+        }
         self.reg
     }
 }
