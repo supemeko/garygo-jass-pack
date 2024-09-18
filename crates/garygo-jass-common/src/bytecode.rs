@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
-pub enum JassType {
+pub enum BytecodeValueType {
     Nothing = 0,
     Unknown = 1,
     Null = 2,
@@ -19,35 +19,34 @@ pub enum JassType {
     BooleanArray = 13,
 }
 
-impl From<JassType> for u8 {
-    fn from(value: JassType) -> Self {
+impl From<BytecodeValueType> for u8 {
+    fn from(value: BytecodeValueType) -> Self {
         value as u8
     }
 }
 
-impl JassType {
-    pub fn from_u8(value: u8) -> Option<JassType> {
+impl BytecodeValueType {
+    pub fn from_u8(value: u8) -> Option<BytecodeValueType> {
         let jass = match value {
-            0 => JassType::Nothing,
-            1 => JassType::Unknown,
-            2 => JassType::Null,
-            3 => JassType::Code,
-            4 => JassType::Integer,
-            5 => JassType::Real,
-            6 => JassType::String,
-            7 => JassType::Handle,
-            8 => JassType::Boolean,
-            9 => JassType::IntegerArray,
-            10 => JassType::RealArray,
-            11 => JassType::StringArray,
-            12 => JassType::HandleArray,
-            13 => JassType::BooleanArray,
+            0 => BytecodeValueType::Nothing,
+            1 => BytecodeValueType::Unknown,
+            2 => BytecodeValueType::Null,
+            3 => BytecodeValueType::Code,
+            4 => BytecodeValueType::Integer,
+            5 => BytecodeValueType::Real,
+            6 => BytecodeValueType::String,
+            7 => BytecodeValueType::Handle,
+            8 => BytecodeValueType::Boolean,
+            9 => BytecodeValueType::IntegerArray,
+            10 => BytecodeValueType::RealArray,
+            11 => BytecodeValueType::StringArray,
+            12 => BytecodeValueType::HandleArray,
+            13 => BytecodeValueType::BooleanArray,
             _ => return None,
         };
         return Some(jass);
     }
 }
-
 
 #[derive(Clone, Copy)]
 pub struct Reg {
@@ -73,21 +72,27 @@ impl Debug for Reg {
 }
 
 #[derive(Clone, Copy)]
-pub struct StringId(u32);
+pub struct SymbolId(pub u32);
 
-impl From<u32> for StringId {
+impl From<u32> for SymbolId {
     fn from(value: u32) -> Self {
-        StringId(value)
+        SymbolId(value)
     }
 }
 
-impl From<StringId> for u32 {
-    fn from(value: StringId) -> u32 {
+impl From<usize> for SymbolId {
+    fn from(value: usize) -> Self {
+        SymbolId(value as u32)
+    }
+}
+
+impl From<SymbolId> for u32 {
+    fn from(value: SymbolId) -> u32 {
         value.0
     }
 }
 
-impl Debug for StringId {
+impl Debug for SymbolId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "var 0x{:X}", self.0)
     }
@@ -118,26 +123,26 @@ pub enum Bytecode {
     Minlimit(u8, u8, u8, u32),
     Endprogram(u8, u8, u8, u32),
     Oldjump(u32),
-    Function(StringId),
+    Function(SymbolId),
     Endfunction,
-    Local(JassType, StringId),
-    Global(JassType, StringId),
-    Constant(JassType, StringId),
-    Funcarg(JassType, u8, StringId),
-    Extends(StringId),
-    Type(StringId),
+    Local(BytecodeValueType, SymbolId),
+    Global(BytecodeValueType, SymbolId),
+    Constant(BytecodeValueType, SymbolId),
+    Funcarg(BytecodeValueType, u8, SymbolId),
+    Extends(SymbolId),
+    Type(SymbolId),
     Popn(u8),
-    SetRegLiteral(Reg, JassType, u32),
+    SetRegLiteral(Reg, BytecodeValueType, u32),
     Move(Reg, Reg),
-    SetRegVar(Reg, JassType, StringId),
+    SetRegVar(Reg, BytecodeValueType, SymbolId),
     SetRegCode(Reg, FunctionId),
-    SetRegVarArray(Reg, Reg, JassType, StringId),
-    SetVar(Reg, StringId),
-    SetVarArray(Reg, Reg, StringId),
+    SetRegVarArray(Reg, Reg, BytecodeValueType, SymbolId),
+    SetVar(Reg, SymbolId),
+    SetVarArray(Reg, Reg, SymbolId),
     Push(Reg),
     Pop(Reg),
-    Callnative(StringId),
-    Calljass(StringId),
+    Callnative(SymbolId),
+    Calljass(SymbolId),
     IntToReal(Reg),
     And(Reg, Reg, Reg),
     Or(Reg, Reg, Reg),
@@ -202,7 +207,7 @@ impl Debug for Bytecode {
                 write!(f, "Popn({:02X})", r1)
             }
             Bytecode::SetRegLiteral(r1, r2, arg) => {
-                write!(f, "SetRegLiteral({r1:?}, {r2:?}, {arg:08X})")
+                write!(f, "SetRegLiteral({r1:?}, {r2:?}, 0x{arg:08X})")
             }
             Bytecode::Move(r1, r2) => {
                 write!(f, "Move({r1:?}, {r2:?})")
@@ -306,25 +311,30 @@ impl Debug for Bytecode {
 }
 
 impl Bytecode {
-    pub fn from(r3:u8, r2: u8, r1:u8, op: u8, arg: u32) -> Option<Bytecode> {
+    pub fn from(r3: u8, r2: u8, r1: u8, op: u8, arg: u32) -> Option<Bytecode> {
         let bytecode = match op {
             0x00 => Bytecode::Minlimit(r1, r2, r3, arg),
             0x01 => Bytecode::Endprogram(r1, r2, r3, arg),
             0x02 => Bytecode::Oldjump(arg),
             0x03 => Bytecode::Function(arg.into()),
             0x04 => Bytecode::Endfunction,
-            0x05 => Bytecode::Local(JassType::from_u8(r1)?, arg.into()),
-            0x06 => Bytecode::Global(JassType::from_u8(r1)?, arg.into()),
-            0x07 => Bytecode::Constant(JassType::from_u8(r1)?, arg.into()),
-            0x08 => Bytecode::Funcarg(JassType::from_u8(r1)?, r2, arg.into()),
+            0x05 => Bytecode::Local(BytecodeValueType::from_u8(r1)?, arg.into()),
+            0x06 => Bytecode::Global(BytecodeValueType::from_u8(r1)?, arg.into()),
+            0x07 => Bytecode::Constant(BytecodeValueType::from_u8(r1)?, arg.into()),
+            0x08 => Bytecode::Funcarg(BytecodeValueType::from_u8(r1)?, r2, arg.into()),
             0x09 => Bytecode::Extends(arg.into()),
             0x0A => Bytecode::Type(arg.into()),
             0x0B => Bytecode::Popn(r1),
-            0x0C => Bytecode::SetRegLiteral(r1.into(), JassType::from_u8(r2)?, arg),
+            0x0C => Bytecode::SetRegLiteral(r1.into(), BytecodeValueType::from_u8(r2)?, arg),
             0x0D => Bytecode::Move(r1.into(), r2.into()),
-            0x0E => Bytecode::SetRegVar(r1.into(), JassType::from_u8(r2)?, arg.into()),
+            0x0E => Bytecode::SetRegVar(r1.into(), BytecodeValueType::from_u8(r2)?, arg.into()),
             0x0F => Bytecode::SetRegCode(r1.into(), arg.into()),
-            0x10 => Bytecode::SetRegVarArray(r1.into(), r2.into(), JassType::from_u8(r3)?, arg.into()),
+            0x10 => Bytecode::SetRegVarArray(
+                r1.into(),
+                r2.into(),
+                BytecodeValueType::from_u8(r3)?,
+                arg.into(),
+            ),
             0x11 => Bytecode::SetVar(r1.into(), arg.into()),
             0x12 => Bytecode::SetVarArray(r1.into(), r2.into(), arg.into()),
             0x13 => Bytecode::Push(r1.into()),

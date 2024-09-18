@@ -5,6 +5,7 @@ edition = "2021"
 exclude = ["crates/"]
 
 [dependencies]
+derive_more = {version = "1.0.0", features = ["from"]}
 
 [workspace]
 members = [
