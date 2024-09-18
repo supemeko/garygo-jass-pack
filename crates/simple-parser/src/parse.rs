@@ -68,6 +68,8 @@ pub struct Parse<R: Read> {
     functions: HashMap<usize, Function>,
     natives: HashMap<usize, Function>,
     var_type: HashMap<usize, ScriptType>,
+    strings: Vec<String>,
+    string_index_map: HashMap<String, u32>,
     lex: Lex<R>,
     reg: u8,
 }
@@ -82,6 +84,8 @@ impl<R: Read> Parse<R> {
             functions: HashMap::new(),
             natives: HashMap::new(),
             var_type: HashMap::new(),
+            strings: vec![],
+            string_index_map: HashMap::new(),
             reg: 0x00,
         }
     }
@@ -161,6 +165,17 @@ impl<R: Read> Parse<R> {
             self.reg += 1;
         }
         self.reg
+    }
+
+    fn add_literal_string(&mut self, str: Vec<u8>) -> Result<u32> {
+        let str = String::from_utf8(str)?;
+        if let Some(x) = self.string_index_map.get(str.as_str()) {
+            return Ok(*x);
+        }
+        let idx = self.strings.len() as u32;
+        self.strings.push(str.clone());
+        self.string_index_map.insert(str, idx);
+        Ok(idx)
     }
 }
 
@@ -269,6 +284,21 @@ impl<R: Read> Parse<R> {
     fn expression(&mut self, op_priority: isize) -> Result<Exp> {
         let token = self.next()?;
         let left = match token {
+            Token::String(v) => {
+                let str_index = self.add_literal_string(v)?;
+                let reg = self.next_reg();
+                self.bytecodes.push(Bytecode::SetRegLiteral(
+                    reg.into(),
+                    BytecodeValueType::String,
+                    str_index as u32,
+                ));
+
+                Exp {
+                    exp_type: self.typeinfo("string")?,
+                    pos: reg,
+                    priority: 0,
+                }
+            }
             Token::Null => {
                 let reg = self.next_reg();
                 self.bytecodes.push(Bytecode::SetRegLiteral(
@@ -835,6 +865,7 @@ impl<R: Read> Parse<R> {
         let symbol_table = &self.symbol_table;
         let types = &self.types;
         let functions = &self.functions;
+        let strings = &self.strings;
         println!("symbol_table:");
         for (idx, symbol) in symbol_table.iter().enumerate() {
             let t = types.get(&idx).cloned();
@@ -847,6 +878,12 @@ impl<R: Read> Parse<R> {
                 .and_then(|t| Some(format!(" {t:?}")))
                 .unwrap_or("".to_string());
             println!("{idx}:{symbol}{t}{f}")
+        }
+        println!("");
+        println!("");
+        println!("string literal:");
+        for (idx, str) in strings.iter().enumerate() {
+            println!("{idx}:{str}")
         }
         println!("");
         println!("");
@@ -887,6 +924,18 @@ fn test_var_def() -> Result<()> {
 
     let input_str =
         "globals \n constant integer b = 20 \n constant integer a = 5 + 10 * b \n endglobals";
+    let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+    parse.file()?;
+    parse.show();
+
+    Ok(())
+}
+
+#[test]
+fn test_string_literal() -> Result<()> {
+    use std::io::Cursor;
+
+    let input_str = "globals \n constant string ss = \"abcd\" \n endglobals";
     let mut parse = Parse::test_instance(Cursor::new(input_str))?;
     parse.file()?;
     parse.show();
