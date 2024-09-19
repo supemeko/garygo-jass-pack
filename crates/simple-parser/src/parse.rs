@@ -576,6 +576,18 @@ impl<R: Read> Parse<R> {
                     }
                 }
             }
+            Token::Sub => {
+                // negate
+                let exp = self.expression(0)?;
+                let exp_type = exp.exp_type.clone();
+                let reg = self.next_reg();
+                self.bytecodes.push(Bytecode::Negate(reg.into()));
+                Exp {
+                    exp_type,
+                    pos: reg,
+                    priority: 0,
+                }
+            }
             _ => return Err(format!("not support exp: {token:?}").into()),
         };
 
