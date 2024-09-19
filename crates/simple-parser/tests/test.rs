@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod test {
-    use simple_parser::Parse;
-    use simple_parser::Result;
+    use simple_parser::{Parse, Result};
     use std::io::Cursor;
 
     #[test]
