@@ -117,6 +117,14 @@ impl<R: Read> Lex<R> {
         Ok(byte == Some(ch))
     }
 
+    fn guess_byte_and_consume(&mut self, ch: u8) -> Result<bool> {
+        let guess = self.guess_byte(ch)?;
+        if guess {
+            self.next_byte()?;
+        }
+        Ok(guess)
+    }
+
     pub fn expect(&mut self, ch: u8) -> Result<()> {
         if !self.guess_byte(ch)? {
             return Err(format!("expect {}", ch as char).into());
@@ -322,29 +330,28 @@ impl<R: Read> Lex<R> {
                 }
             }
             b'=' => {
-                if self.guess_byte(b'=')? {
-                    self.next()?;
+                if self.guess_byte_and_consume(b'=')? {
                     Token::Equal
                 } else {
                     Token::Assign
                 }
             }
             b'!' => {
-                if self.guess_byte(b'=')? {
+                if self.guess_byte_and_consume(b'=')? {
                     Token::NotEq
                 } else {
                     Token::Not
                 }
             }
             b'<' => {
-                if self.guess_byte(b'=')? {
+                if self.guess_byte_and_consume(b'=')? {
                     Token::LesEq
                 } else {
                     Token::Less
                 }
             }
             b'>' => {
-                if self.guess_byte(b'=')? {
+                if self.guess_byte_and_consume(b'=')? {
                     Token::GreEq
                 } else {
                     Token::Greater

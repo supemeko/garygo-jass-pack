@@ -255,6 +255,10 @@ impl Token {
             Token::Mul => 2,
             Token::Equal => 3,
             Token::NotEq => 3,
+            Token::LesEq => 3,
+            Token::GreEq => 3,
+            Token::Less => 3,
+            Token::Greater => 3,
             _ => -1,
         }
     }
@@ -329,7 +333,15 @@ impl<R: Read> Parse<R> {
         let exp_type = {
             if matches!(token, Token::Add | Token::Sub | Token::Mul | Token::Div) {
                 left.exp_type.clone()
-            } else if matches!(token, Token::Equal | Token::NotEq) {
+            } else if matches!(
+                token,
+                Token::Equal
+                    | Token::NotEq
+                    | Token::LesEq
+                    | Token::GreEq
+                    | Token::Less
+                    | Token::Greater
+            ) {
                 self.typeinfo("boolean")
                     .cloned()
                     .expect("parser lack base type: boolean")
@@ -368,12 +380,6 @@ impl<R: Read> Parse<R> {
                 self.bytecodes.push(Bytecode::IntToReal(right.pos.into()));
             }
 
-            let op2: fn(Reg, Reg, Reg) -> Bytecode = Bytecode::Add;
-            println!(
-                "1: {binop:?} 2: {op:?} 3: {:?} 4:{}",
-                op2,
-                op == Bytecode::Add
-            );
             return self.do_binop(&binop, op, left, right);
         }
 
@@ -381,7 +387,17 @@ impl<R: Read> Parse<R> {
     }
 
     fn binop(&mut self, binop: Token, left: Exp, right: Exp) -> Result<Exp> {
-        if matches!(binop, Token::Add | Token::Sub | Token::Mul | Token::Div) {
+        if matches!(
+            binop,
+            Token::Add
+                | Token::Sub
+                | Token::Mul
+                | Token::Div
+                | Token::LesEq
+                | Token::GreEq
+                | Token::Less
+                | Token::Greater
+        ) {
             return self.binop_num(binop, left, right);
         }
 
