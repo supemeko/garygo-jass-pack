@@ -197,7 +197,7 @@ impl<R: Read> Parse<R> {
     fn current_loop(&mut self) -> Result<u32> {
         let label = match self.loop_label_num.last() {
             Some(label) => *label,
-            None => return Err("exitwhen is outside loop statment".into()),
+            None => return Err("exitwhen is outside loop statement".into()),
         };
 
         Ok(label)
@@ -610,7 +610,7 @@ impl<R: Read> Parse<R> {
         Ok((next_idx, script_type))
     }
 
-    fn if_statment(&mut self, ret: bool) -> Result<()> {
+    fn if_statement(&mut self, ret: bool) -> Result<()> {
         self.expect_consume(&Token::If)?;
         let exp = self.expression(0)?;
         self.expect_consume(&Token::Then)?;
@@ -768,7 +768,7 @@ impl<R: Read> Parse<R> {
         Ok(f)
     }
 
-    fn set_statment(&mut self) -> Result<()> {
+    fn set_statement(&mut self) -> Result<()> {
         self.expect_consume(&Token::Set)?;
 
         // var
@@ -879,7 +879,7 @@ impl<R: Read> Parse<R> {
         Ok(func_ret)
     }
 
-    fn functioncall_statment(&mut self) -> Result<()> {
+    fn functioncall_statement(&mut self) -> Result<()> {
         self.expect_consume(&Token::Call)?;
         let (func_idx, _) = self.next_symbol()?;
         self.functioncall(func_idx)?;
@@ -1017,10 +1017,10 @@ impl<R: Read> Parse<R> {
             let token = self.peek()?;
             match token {
                 Token::Set => {
-                    self.set_statment()?;
+                    self.set_statement()?;
                 }
                 Token::Call => {
-                    self.functioncall_statment()?;
+                    self.functioncall_statement()?;
                 }
                 Token::Return => {
                     self.next()?;
@@ -1055,7 +1055,7 @@ impl<R: Read> Parse<R> {
                         .push(Bytecode::Jumpiftrue(exp.pos.into(), label));
                 }
                 Token::If => {
-                    self.if_statment(ret)?;
+                    self.if_statement(ret)?;
                 }
                 Token::Endloop | Token::Else | Token::Elseif | Token::Endif => {
                     return Ok(self.next()?);
@@ -1077,7 +1077,7 @@ impl<R: Read> Parse<R> {
                 Token::Native | Token::Constant => self.native_function()?,
                 Token::Function => self.user_defined_function()?,
                 Token::Eos => break,
-                _ => return Err(format!("unexpect statment {token:?}").into()),
+                _ => return Err(format!("unexpect statement {token:?}").into()),
             }
         }
         Ok(())
@@ -1222,7 +1222,7 @@ fn test_loop_exitwhen() -> Result<()> {
 }
 
 #[test]
-fn test_if_statment() -> Result<()> {
+fn test_if_statement() -> Result<()> {
     use std::io::Cursor;
 
     let input_str =
