@@ -70,6 +70,8 @@ pub struct Parse<R: Read> {
     var_type: HashMap<usize, ScriptType>,
     strings: Vec<String>,
     string_index_map: HashMap<String, u32>,
+    loop_label_num: Vec<u32>,
+    label_num: u32,
     lex: Lex<R>,
     reg: u8,
 }
@@ -86,6 +88,8 @@ impl<R: Read> Parse<R> {
             var_type: HashMap::new(),
             strings: vec![],
             string_index_map: HashMap::new(),
+            loop_label_num: vec![],
+            label_num: 0,
             reg: 0x00,
         }
     }
@@ -176,6 +180,31 @@ impl<R: Read> Parse<R> {
         self.strings.push(str.clone());
         self.string_index_map.insert(str, idx);
         Ok(idx)
+    }
+
+    fn next_label(&mut self) -> u32 {
+        self.label_num += 1;
+        self.label_num
+    }
+
+    fn push_loop(&mut self) -> u32 {
+        let label = self.next_label();
+        self.loop_label_num.push(label);
+        label
+    }
+
+    fn current_loop(&mut self) -> Result<u32> {
+        let label = match self.loop_label_num.last() {
+            Some(label) => *label,
+            None => return Err("exitwhen is outside loop statment".into()),
+        };
+
+        Ok(label)
+    }
+
+    fn pop_loop(&mut self) -> u32 {
+        let label = self.loop_label_num.pop().expect("is not way!");
+        label
     }
 }
 
@@ -788,6 +817,11 @@ impl<R: Read> Parse<R> {
             }
         }
 
+        self.chunk(ret)?;
+        Ok(())
+    }
+
+    fn chunk(&mut self, ret: bool) -> Result<Token> {
         loop {
             let token = self.peek()?;
             match token {
@@ -806,7 +840,31 @@ impl<R: Read> Parse<R> {
                 }
                 Token::Endfunction => {
                     self.next()?;
-                    return Ok(());
+                    return Ok(Token::Endfunction);
+                }
+                Token::Loop => {
+                    self.next()?;
+                    let label = self.push_loop();
+                    self.bytecodes.push(Bytecode::Label(label));
+                    let result = self.chunk(ret)?;
+                    if result != Token::Endloop {
+                        return Err(format!("invail chunk").into());
+                    }
+                    self.pop_loop();
+                }
+                Token::Exitwhen => {
+                    self.next()?;
+                    let exp = self.expression(0)?;
+                    let ok = exp.exp_type.base == BytecodeValueType::Boolean;
+                    if !ok {
+                        return Err("exitwhen expect a boolean expression".into());
+                    }
+                    let label = self.current_loop()?;
+                    self.bytecodes
+                        .push(Bytecode::Jumpiftrue(exp.pos.into(), label));
+                }
+                Token::Endloop => {
+                    return Ok(self.next()?);
                 }
                 _ => return Err(format!("invail token: {token:?}").into()),
             }
@@ -936,6 +994,19 @@ fn test_string_literal() -> Result<()> {
     use std::io::Cursor;
 
     let input_str = "globals \n constant string ss = \"abcd\" \n endglobals";
+    let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+    parse.file()?;
+    parse.show();
+
+    Ok(())
+}
+
+#[test]
+fn test_loop() -> Result<()> {
+    use std::io::Cursor;
+
+    let input_str =
+        "function Main takes nothing returns nothing \n loop loop endloop endloop \n endfunction";
     let mut parse = Parse::test_instance(Cursor::new(input_str))?;
     parse.file()?;
     parse.show();
