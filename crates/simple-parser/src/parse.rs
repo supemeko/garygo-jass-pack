@@ -610,6 +610,79 @@ impl<R: Read> Parse<R> {
         Ok((next_idx, script_type))
     }
 
+    fn if_statment(&mut self, ret: bool) -> Result<()> {
+        self.expect_consume(&Token::If)?;
+        let exp = self.expression(0)?;
+        self.expect_consume(&Token::Then)?;
+
+        self.bytecodes
+            .push(Bytecode::Jumpiffalse(exp.pos.into(), 0));
+        let jump = self.bytecodes.len() - 1;
+        let mut jumpelse = vec![];
+        let mut jumpend = vec![];
+        let mut has_else = false;
+        jumpelse.push(jump);
+
+        let mut jumpelse = jump;
+        loop {
+            let token = self.chunk(ret)?;
+            if token == Token::Endif {
+                break;
+            }
+
+            // jump to endif
+            self.bytecodes.push(Bytecode::Jump(0));
+            let jump = self.bytecodes.len() - 1;
+            jumpend.push(jump);
+            match token {
+                Token::Elseif => {
+                    // cond
+                    let jump_label = self.next_label();
+                    self.bytecodes.push(Bytecode::Label(jump_label as u32));
+                    match self.bytecodes.get_mut(jumpelse) {
+                        Some(Bytecode::Jumpiffalse(_, loc)) => *loc = jump_label,
+                        _ => panic!("expect Jumpiffalse"),
+                    };
+                    let exp = self.expression(0)?;
+                    self.bytecodes
+                        .push(Bytecode::Jumpiffalse(exp.pos.into(), 0));
+                    jumpelse = self.bytecodes.len() - 1;
+
+                    // then
+                    self.expect_consume(&Token::Then)?;
+                }
+                Token::Else => {
+                    has_else = true;
+                    let jump_label = self.next_label();
+                    self.bytecodes.push(Bytecode::Label(jump_label as u32));
+                    match self.bytecodes.get_mut(jumpelse) {
+                        Some(Bytecode::Jumpiffalse(_, loc)) => *loc = jump_label,
+                        _ => panic!("expect Jumpiffalse"),
+                    };
+                }
+                _ => panic!("expect else/elseif"),
+            }
+        }
+
+        let jump_label = self.next_label();
+        self.bytecodes.push(Bytecode::Label(jump_label as u32));
+        for end in jumpend {
+            match self.bytecodes.get_mut(end) {
+                Some(Bytecode::Jump(loc)) => *loc = jump_label,
+                _ => panic!(""),
+            };
+        }
+
+        if !has_else {
+            match self.bytecodes.get_mut(jumpelse) {
+                Some(Bytecode::Jumpiffalse(_, loc)) => *loc = jump_label,
+                _ => panic!(""),
+            };
+        }
+
+        Ok(())
+    }
+
     fn function_head(&mut self) -> Result<&Function> {
         let token = self.next()?;
         let function_token = match token {
@@ -927,7 +1000,6 @@ impl<R: Read> Parse<R> {
             let token = self.peek()?;
             match token {
                 Token::Local => {
-                    self.next()?;
                     self.var_declared()?;
                 }
                 _ => {
@@ -982,7 +1054,10 @@ impl<R: Read> Parse<R> {
                     self.bytecodes
                         .push(Bytecode::Jumpiftrue(exp.pos.into(), label));
                 }
-                Token::Endloop => {
+                Token::If => {
+                    self.if_statment(ret)?;
+                }
+                Token::Endloop | Token::Else | Token::Elseif | Token::Endif => {
                     return Ok(self.next()?);
                 }
                 _ => return Err(format!("invail token: {token:?}").into()),
@@ -1139,6 +1214,19 @@ fn test_loop_exitwhen() -> Result<()> {
 
     let input_str =
         "function Main takes nothing returns nothing \n loop loop exitwhen 1 == 1 endloop exitwhen true endloop \n endfunction";
+    let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+    parse.file()?;
+    parse.show();
+
+    Ok(())
+}
+
+#[test]
+fn test_if_statment() -> Result<()> {
+    use std::io::Cursor;
+
+    let input_str =
+        "function Main takes nothing returns nothing \n local integer i local integer j if true then set i = 5 set j = 6 elseif false then set i = 10 else set j = 7 endif \n endfunction";
     let mut parse = Parse::test_instance(Cursor::new(input_str))?;
     parse.file()?;
     parse.show();
