@@ -137,14 +137,15 @@ impl<R: Read> Parse<R> {
         Ok(position)
     }
 
-    fn typeinfo(&mut self, symbol: &str) -> Result<ScriptType> {
-        let idx = self.symbol_index(symbol)?;
-        let script_type = match self.types.get(&idx).cloned() {
-            Some(types) => types,
-            None => todo!(),
-        };
+    fn get_symbol_index(&self, symbol: &str) -> Option<usize> {
+        let table = &self.symbol_table;
+        table.iter().position(|v| v.as_str() == symbol)
+    }
 
-        Ok(script_type)
+    fn typeinfo(&self, symbol: &str) -> Option<&ScriptType> {
+        let idx = self.get_symbol_index(symbol)?;
+        let script_type = self.types.get(&idx)?;
+        Some(script_type)
     }
 
     /// 依赖文法保证安全性
@@ -252,6 +253,8 @@ impl Token {
             Token::Sub => 1,
             Token::Div => 2,
             Token::Mul => 2,
+            Token::Equal => 3,
+            Token::NotEq => 3,
             _ => -1,
         }
     }
@@ -259,8 +262,62 @@ impl Token {
 }
 
 impl<R: Read> Parse<R> {
+    fn can_as_other(&self, one: &ScriptType, other: &ScriptType) -> Option<Option<ScriptType>> {
+        if one.array != other.array {
+            return None;
+        }
+
+        if one.name == "null" {
+            return Some(None);
+        }
+
+        if one == other {
+            return Some(None);
+        }
+
+        if (one.base == other.base) && other.extends == "" {
+            return Some(None);
+        }
+
+        if one.base == BytecodeValueType::Integer && other.name == "real" {
+            return Some(Some(other.clone()));
+        }
+
+        let one_name = one.name.clone();
+        let mut cur = one;
+        loop {
+            if cur.extends.len() == 0 {
+                return None;
+            }
+            if cur.extends == other.name {
+                return Some(None);
+            }
+            cur = self.typeinfo(cur.extends.as_str()).expect(
+                format!(
+                    "extends not exists type: {} extends {}",
+                    one_name.as_str(),
+                    cur.extends.as_str(),
+                )
+                .as_str(),
+            );
+        }
+    }
+
+    fn cast_to(&mut self, exp: Exp, target: ScriptType) -> Result<Exp> {
+        if exp.exp_type.base == BytecodeValueType::Integer
+            && Some(target) == self.typeinfo("real").cloned()
+        {
+            self.bytecodes.push(Bytecode::IntToReal(exp.pos.into()));
+            return Ok(exp);
+        }
+        Err("not match cast to method".into())
+    }
+}
+
+impl<R: Read> Parse<R> {
     fn do_binop(
         &mut self,
+        token: &Token,
         binop: fn(Reg, Reg, Reg) -> Bytecode,
         left: Exp,
         right: Exp,
@@ -268,14 +325,26 @@ impl<R: Read> Parse<R> {
         let reg = self.next_reg();
         self.bytecodes
             .push(binop(reg.into(), left.pos.into(), right.pos.into()));
+
+        let exp_type = {
+            if matches!(token, Token::Add | Token::Sub | Token::Mul | Token::Div) {
+                left.exp_type.clone()
+            } else if matches!(token, Token::Equal | Token::NotEq) {
+                self.typeinfo("boolean")
+                    .cloned()
+                    .expect("parser lack base type: boolean")
+            } else {
+                todo!()
+            }
+        };
         return Ok(Exp {
-            exp_type: left.exp_type.clone(),
+            exp_type,
             pos: reg,
             priority: 0,
         });
     }
 
-    fn binop(&mut self, binop: Token, left: Exp, right: Exp) -> Result<Exp> {
+    fn binop_num(&mut self, binop: Token, left: Exp, right: Exp) -> Result<Exp> {
         let op = binop.binop_bytecode();
         let left_type_name = left.exp_type.name.clone();
         let right_type_name = right.exp_type.name.clone();
@@ -284,7 +353,7 @@ impl<R: Read> Parse<R> {
             && left_type_name == "string"
             && !matches!(binop, Token::Add)
         {
-            return self.do_binop(op, left, right);
+            return self.do_binop(&binop, op, left, right);
         }
 
         if (left_type_name == "integer" || left_type_name == "real")
@@ -299,7 +368,33 @@ impl<R: Read> Parse<R> {
                 self.bytecodes.push(Bytecode::IntToReal(right.pos.into()));
             }
 
-            return self.do_binop(op, left, right);
+            let op2: fn(Reg, Reg, Reg) -> Bytecode = Bytecode::Add;
+            println!(
+                "1: {binop:?} 2: {op:?} 3: {:?} 4:{}",
+                op2,
+                op == Bytecode::Add
+            );
+            return self.do_binop(&binop, op, left, right);
+        }
+
+        Err("invail binop".into())
+    }
+
+    fn binop(&mut self, binop: Token, left: Exp, right: Exp) -> Result<Exp> {
+        if matches!(binop, Token::Add | Token::Sub | Token::Mul | Token::Div) {
+            return self.binop_num(binop, left, right);
+        }
+
+        if matches!(binop, Token::Equal | Token::NotEq) {
+            if left.exp_type.base != right.exp_type.base {
+                return Err(format!(
+                    "Type error {} cannot compare to {}",
+                    left.exp_type.name, right.exp_type.name
+                )
+                .into());
+            }
+            let op = binop.binop_bytecode();
+            return self.do_binop(&binop, op, left, right);
         }
 
         Err("invail binop".into())
@@ -323,7 +418,10 @@ impl<R: Read> Parse<R> {
                 ));
 
                 Exp {
-                    exp_type: self.typeinfo("string")?,
+                    exp_type: self
+                        .typeinfo("string")
+                        .cloned()
+                        .expect("parser lack base type: string"),
                     pos: reg,
                     priority: 0,
                 }
@@ -336,7 +434,10 @@ impl<R: Read> Parse<R> {
                     0,
                 ));
                 Exp {
-                    exp_type: self.typeinfo("null")?,
+                    exp_type: self
+                        .typeinfo("null")
+                        .cloned()
+                        .expect("parser lack base type: null"),
                     pos: reg,
                     priority: 0,
                 }
@@ -349,7 +450,10 @@ impl<R: Read> Parse<R> {
                     if token == Token::True { 1 } else { 0 },
                 ));
                 Exp {
-                    exp_type: self.typeinfo("boolean")?,
+                    exp_type: self
+                        .typeinfo("boolean")
+                        .cloned()
+                        .expect("parser lack base type: boolean"),
                     pos: reg,
                     priority: 0,
                 }
@@ -362,7 +466,10 @@ impl<R: Read> Parse<R> {
                     i as u64 as u32,
                 ));
                 Exp {
-                    exp_type: self.typeinfo("integer")?,
+                    exp_type: self
+                        .typeinfo("integer")
+                        .cloned()
+                        .expect("parser lack base type: integer"),
                     pos: reg,
                     priority: 0,
                 }
@@ -375,7 +482,10 @@ impl<R: Read> Parse<R> {
                     (i as f32).to_bits(),
                 ));
                 Exp {
-                    exp_type: self.typeinfo("real")?,
+                    exp_type: self
+                        .typeinfo("real")
+                        .cloned()
+                        .expect("parser lack base type: real"),
                     pos: reg,
                     priority: 0,
                 }
@@ -668,14 +778,23 @@ impl<R: Read> Parse<R> {
             }
 
             param += 1;
-            let exp = self.expression(0)?;
+            let mut exp = self.expression(0)?;
             let arg = match func.args.get(param - 1) {
                 Some(arg) => arg,
                 None => return Err("function call params amount is incorrect!".into()),
             };
-            if exp.exp_type != arg.script_type {
-                return Err("function call params type is not same".into());
-            }
+            let as_other = self.can_as_other(&exp.exp_type, &arg.script_type);
+            let Some(as_other) = as_other else {
+                return Err(format!(
+                    "Type error: {} cannot as {}",
+                    exp.exp_type.name, arg.script_type.name
+                )
+                .into());
+            };
+            if let Some(as_other) = as_other {
+                exp = self.cast_to(exp, as_other)?;
+            };
+
             self.bytecodes.push(Bytecode::Push(exp.pos.into()));
         }
         self.expect_consume(&Token::ParR)?;
@@ -1007,6 +1126,19 @@ fn test_loop() -> Result<()> {
 
     let input_str =
         "function Main takes nothing returns nothing \n loop loop endloop endloop \n endfunction";
+    let mut parse = Parse::test_instance(Cursor::new(input_str))?;
+    parse.file()?;
+    parse.show();
+
+    Ok(())
+}
+
+#[test]
+fn test_loop_exitwhen() -> Result<()> {
+    use std::io::Cursor;
+
+    let input_str =
+        "function Main takes nothing returns nothing \n loop loop exitwhen 1 == 1 endloop exitwhen true endloop \n endfunction";
     let mut parse = Parse::test_instance(Cursor::new(input_str))?;
     parse.file()?;
     parse.show();
