@@ -323,6 +323,7 @@ impl<R: Read> Lex<R> {
             }
             b'=' => {
                 if self.guess_byte(b'=')? {
+                    self.next()?;
                     Token::Equal
                 } else {
                     Token::Assign
