@@ -405,7 +405,10 @@ impl<R: Read> Parse<R> {
         }
 
         if matches!(binop, Token::Equal | Token::NotEq) {
-            if left.exp_type.base != right.exp_type.base {
+            if left.exp_type.base != right.exp_type.base
+                && left.exp_type.base != BytecodeValueType::Null
+                && right.exp_type.base != BytecodeValueType::Null
+            {
                 return Err(format!(
                     "Type error {} cannot compare to {}",
                     left.exp_type.name, right.exp_type.name
@@ -417,8 +420,8 @@ impl<R: Read> Parse<R> {
         }
 
         if matches!(binop, Token::And | Token::Or) {
-            if left.exp_type.base != BytecodeValueType::Boolean
-                || right.exp_type.base != BytecodeValueType::Boolean
+            if (left.exp_type.base != BytecodeValueType::Boolean
+                || right.exp_type.base != BytecodeValueType::Boolean)
             {
                 return Err(format!(
                     "Type error {} cannot and {}",
