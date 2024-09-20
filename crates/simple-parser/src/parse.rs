@@ -414,11 +414,27 @@ impl<R: Read> Parse<R> {
                 && left.exp_type.base != BytecodeValueType::Null
                 && right.exp_type.base != BytecodeValueType::Null
             {
-                return Err(format!(
-                    "Type error {} cannot compare to {}",
-                    left.exp_type.name, right.exp_type.name
-                )
-                .into());
+                let left_type_name = left.exp_type.name.clone();
+                let right_type_name = right.exp_type.name.clone();
+
+                if (left_type_name == "integer" || left_type_name == "real")
+                    && (right_type_name == "integer" || right_type_name == "real")
+                {
+                    if left_type_name == right_type_name {
+                        // is ok
+                    } else if left_type_name == "integer" {
+                        self.bytecodes.push(Bytecode::IntToReal(left.pos.into()));
+                    } else {
+                        assert_eq!(right_type_name, "integer");
+                        self.bytecodes.push(Bytecode::IntToReal(right.pos.into()));
+                    }
+                } else {
+                    return Err(format!(
+                        "Type error {} cannot compare to {}",
+                        left.exp_type.name, right.exp_type.name
+                    )
+                    .into());
+                }
             }
             let op = binop.binop_bytecode();
             return self.do_binop(&binop, op, left, right);
