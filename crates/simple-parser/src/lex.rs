@@ -440,6 +440,8 @@ impl<R: Read> Lex<R> {
             b',' => Token::Comma,
             b'(' => Token::ParL,
             b')' => Token::ParR,
+            b'[' => Token::SqurL,
+            b']' => Token::SqurR,
             _ => return Err(format!("invaild char {}", ch as char).into()),
         };
         Ok(token)
