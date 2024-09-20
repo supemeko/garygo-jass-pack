@@ -608,6 +608,21 @@ impl<R: Read> Parse<R> {
                     priority: 0,
                 }
             }
+            Token::Not => {
+                // not expression
+                let exp = self.expression(0)?;
+                let exp_type = exp.exp_type.clone();
+                if exp_type.base != BytecodeValueType::Boolean {
+                    return Err("not expression must be followed by a boolean expression".into());
+                }
+                let reg = self.next_reg();
+                self.bytecodes.push(Bytecode::Not(reg.into()));
+                Exp {
+                    exp_type,
+                    pos: reg,
+                    priority: 0,
+                }
+            }
             _ => return Err(format!("not support exp: {token:?}").into()),
         };
 
