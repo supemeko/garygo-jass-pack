@@ -342,6 +342,8 @@ impl<R: Read> Parse<R> {
                     | Token::GreEq
                     | Token::Less
                     | Token::Greater
+                    | Token::And
+                    | Token::Or
             ) {
                 self.typeinfo("boolean")
                     .cloned()
@@ -414,7 +416,21 @@ impl<R: Read> Parse<R> {
             return self.do_binop(&binop, op, left, right);
         }
 
-        Err("invail binop".into())
+        if matches!(binop, Token::And | Token::Or) {
+            if left.exp_type.base != BytecodeValueType::Boolean
+                || right.exp_type.base != BytecodeValueType::Boolean
+            {
+                return Err(format!(
+                    "Type error {} cannot and {}",
+                    left.exp_type.name, right.exp_type.name
+                )
+                .into());
+            }
+            let op = binop.binop_bytecode();
+            return self.do_binop(&binop, op, left, right);
+        }
+
+        Err(format!("invail binop:{binop:?}").into())
     }
 
     ///! exp ::= name | int | float | exp + exp | exp - exp | exp * exp | exp / exp| funcall | ( exp ) | name[exp]
