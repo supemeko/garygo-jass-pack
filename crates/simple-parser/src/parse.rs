@@ -573,7 +573,7 @@ impl<R: Read> Parse<R> {
                         }
                     }
 
-                    let reg = if array {
+                    if array {
                         let exp = self.expression(0)?;
                         self.expect_consume(&Token::SqurR)?;
                         let reg = self.next_reg();
@@ -583,7 +583,14 @@ impl<R: Read> Parse<R> {
                             var_type.base,
                             var_symbol,
                         ));
-                        reg
+                        Exp {
+                            exp_type: ScriptType {
+                                array: false,
+                                ..var_type
+                            },
+                            pos: reg,
+                            priority: 0,
+                        }
                     } else {
                         let reg = self.next_reg();
                         self.bytecodes.push(Bytecode::SetRegVar(
@@ -591,13 +598,11 @@ impl<R: Read> Parse<R> {
                             var_type.base,
                             var_symbol,
                         ));
-                        reg
-                    };
-
-                    Exp {
-                        exp_type: var_type,
-                        pos: reg,
-                        priority: 0,
+                        Exp {
+                            exp_type: var_type,
+                            pos: reg,
+                            priority: 0,
+                        }
                     }
                 }
             }
