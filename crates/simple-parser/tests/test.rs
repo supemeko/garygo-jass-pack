@@ -27,7 +27,10 @@ mod test {
         let blizzardj = include_str!("blizzard.j");
         let input_str = format!("{commonj}\n{blizzardj}");
         let mut parse = Parse::test_instance(Cursor::new(input_str.as_str()))?;
-        parse.file()?;
+        if let Err(x) = parse.file() {
+            parse.show_pos();
+            return Err(x);
+        }
         parse.show();
         Ok(())
     }

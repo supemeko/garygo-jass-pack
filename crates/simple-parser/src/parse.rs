@@ -1147,6 +1147,8 @@ impl<R: Read> Parse<R> {
         let types = &self.types;
         let functions = &self.functions;
         let strings = &self.strings;
+        let line = &self.lex.line();
+        let col = &self.lex.col();
         println!("symbol_table:");
         for (idx, symbol) in symbol_table.iter().enumerate() {
             let t = types.get(&idx).cloned();
@@ -1172,6 +1174,14 @@ impl<R: Read> Parse<R> {
         for (idx, bytecode) in bytecodes.iter().enumerate() {
             println!("{idx}:{bytecode:?}")
         }
+
+        println!("end {line}:{col}");
+    }
+
+    pub fn show_pos(&self) {
+        let line = &self.lex.line();
+        let col = &self.lex.col();
+        println!("end {line}:{col}");
     }
 }
 
