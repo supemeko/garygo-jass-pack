@@ -556,7 +556,7 @@ impl<R: Read> Parse<R> {
                     let var_symbol = SymbolId(symbol as u32);
                     let var_type = self.get_var_type(var_symbol)?.clone();
 
-                    let array = self.guess(&Token::SqurL)?;
+                    let array = self.guess_and_consume(&Token::SqurL)?;
                     if var_type.array != array {
                         if array {
                             return Err(format!(
@@ -575,6 +575,7 @@ impl<R: Read> Parse<R> {
 
                     let reg = if array {
                         let exp = self.expression(0)?;
+                        self.expect_consume(&Token::SqurR)?;
                         let reg = self.next_reg();
                         self.bytecodes.push(Bytecode::SetRegVarArray(
                             reg.into(),
