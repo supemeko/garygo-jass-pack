@@ -5,9 +5,16 @@ edition = "2021"
 exclude = ["crates/"]
 
 [dependencies]
-derive_more = {version = "1.0.0", features = ["from"]}
+derive_more = { version = "1.0.0", features = ["from"] }
+simple-parser = { path = "crates/simple-parser", version = "0.1.0" }
 
 [workspace]
-members = [
-  "crates/*"
-]
+members = ["crates/*"]
+
+[[bin]]
+name = "wintool-bytecode-viewer"
+path = "crates/wintool-bytecode-viewer/src/main.rs"
+
+[[bin]]
+name = "parser"
+path = "src/bin/parser.rs"

@@ -31,6 +31,7 @@ name = "garygo-jass-pack"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "simple-parser",
 ]
 
 [[package]]
