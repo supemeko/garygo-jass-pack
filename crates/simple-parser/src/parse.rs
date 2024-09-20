@@ -420,8 +420,8 @@ impl<R: Read> Parse<R> {
         }
 
         if matches!(binop, Token::And | Token::Or) {
-            if (left.exp_type.base != BytecodeValueType::Boolean
-                || right.exp_type.base != BytecodeValueType::Boolean)
+            if left.exp_type.base != BytecodeValueType::Boolean
+                || right.exp_type.base != BytecodeValueType::Boolean
             {
                 return Err(format!(
                     "Type error {} cannot and {}",
