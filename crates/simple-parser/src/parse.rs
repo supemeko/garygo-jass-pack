@@ -259,6 +259,7 @@ impl Token {
             Token::GreEq => 3,
             Token::Less => 3,
             Token::Greater => 3,
+            Token::And => 3,
             _ => -1,
         }
     }
@@ -507,7 +508,7 @@ impl<R: Read> Parse<R> {
                 }
             }
             Token::ParL => {
-                let exp = self.expression(op_priority)?;
+                let exp = self.expression(0)?;
                 self.expect_consume(&Token::ParR)?;
                 exp
             }
