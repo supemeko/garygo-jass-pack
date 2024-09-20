@@ -634,6 +634,23 @@ impl<R: Read> Parse<R> {
                     priority: 0,
                 }
             }
+            Token::Function => {
+                let exp_type = self
+                    .typeinfo("code")
+                    .expect("parser lack base type: code")
+                    .clone();
+                let (func_idx, _) = self.next_symbol()?;
+                let _ = self.find_function(func_idx)?;
+                let reg = self.next_reg();
+                self.bytecodes
+                    .push(Bytecode::SetRegCode(reg.into(), (func_idx as u32).into()));
+
+                Exp {
+                    exp_type,
+                    pos: reg,
+                    priority: 0,
+                }
+            }
             _ => return Err(format!("not support exp: {token:?}").into()),
         };
 
@@ -682,6 +699,25 @@ impl<R: Read> Parse<R> {
             None => return Err(format!("not found type: {next_name}").into()),
         };
         Ok((next_idx, script_type))
+    }
+
+    fn find_function(&mut self, func_idx: usize) -> Result<(Token, &Function)> {
+        if self.functions.contains_key(&func_idx) || self.natives.contains_key(&func_idx) {
+            let function = self.functions.get(&func_idx);
+            let native = self.natives.get(&func_idx);
+            let is_func = function.is_some();
+            let call = if function.is_some() {
+                Token::Function
+            } else {
+                Token::Native
+            };
+            match if is_func { function } else { native } {
+                Some(func) => Ok((call, func)),
+                None => return Err("".into()),
+            }
+        } else {
+            return Err("not found function".into());
+        }
     }
 
     fn if_statement(&mut self, ret: bool) -> Result<()> {
@@ -888,23 +924,12 @@ impl<R: Read> Parse<R> {
     }
 
     fn functioncall(&mut self, func_idx: usize) -> Result<Option<ScriptType>> {
-        let (op, func) =
-            if self.functions.contains_key(&func_idx) || self.natives.contains_key(&func_idx) {
-                let function = self.functions.get(&func_idx);
-                let native = self.natives.get(&func_idx);
-                let is_func = function.is_some();
-                let call = if function.is_some() {
-                    Bytecode::Calljass
-                } else {
-                    Bytecode::Callnative
-                };
-                match if is_func { function } else { native } {
-                    Some(func) => (call, func),
-                    None => return Err("".into()),
-                }
-            } else {
-                return Err("not found function".into());
-            };
+        let (op, func) = self.find_function(func_idx)?;
+        let op = if op == Token::Function {
+            Bytecode::Calljass
+        } else {
+            Bytecode::Callnative
+        };
 
         let func = func.clone();
         let param_amount = func.args.len();
