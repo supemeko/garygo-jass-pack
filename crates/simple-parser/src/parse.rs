@@ -260,6 +260,7 @@ impl Token {
             Token::Less => 3,
             Token::Greater => 3,
             Token::And => 3,
+            Token::Or => 3,
             _ => -1,
         }
     }
