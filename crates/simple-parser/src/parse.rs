@@ -249,18 +249,18 @@ impl Token {
 
     fn priority(&self) -> isize {
         match self {
-            Token::Add => 1,
-            Token::Sub => 1,
-            Token::Div => 2,
-            Token::Mul => 2,
-            Token::And => 3,
-            Token::Or => 3,
-            Token::Equal => 4,
-            Token::NotEq => 4,
-            Token::LesEq => 4,
-            Token::GreEq => 4,
-            Token::Less => 4,
-            Token::Greater => 4,
+            Token::And => 1,
+            Token::Or => 1,
+            Token::Equal => 2,
+            Token::NotEq => 2,
+            Token::LesEq => 2,
+            Token::GreEq => 2,
+            Token::Less => 2,
+            Token::Greater => 3,
+            Token::Add => 3,
+            Token::Sub => 3,
+            Token::Div => 4,
+            Token::Mul => 4,
             _ => -1,
         }
     }
