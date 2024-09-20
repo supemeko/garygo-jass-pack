@@ -1,7 +1,6 @@
 use crate::Result;
 use std::{
     io::{Bytes, Read},
-    iter::Peekable,
     mem,
 };
 
@@ -70,17 +69,97 @@ pub enum Token {
 
 impl Eq for Token {}
 
+type StdIoResult = std::result::Result<u8, std::io::Error>;
+
 pub struct Lex<R: Read> {
-    input: Peekable<Bytes<R>>,
+    input: CodeRead<Bytes<R>>,
     ahead: Token,
+}
+
+pub struct CodeRead<I>
+where
+    I: Iterator<Item = StdIoResult>,
+{
+    inner: I,
+    peeked: Option<Option<I::Item>>,
+    num: usize,
+    line: usize,
+    col: usize,
+}
+
+impl<I: Iterator<Item = StdIoResult>> CodeRead<I> {
+    fn new(inner: I) -> Self {
+        CodeRead {
+            inner,
+            peeked: None,
+            num: 0,
+            line: 0,
+            col: 0,
+        }
+    }
+}
+
+fn record(
+    num: &mut usize,
+    line: &mut usize,
+    col: &mut usize,
+    val: Option<StdIoResult>,
+) -> Option<StdIoResult> {
+    if let &Some(Ok(u8)) = &val {
+        *num += 1;
+        *col += 1;
+        if u8 == b'\n' {
+            *line += 1;
+            *col = 0;
+        }
+    }
+
+    val
+}
+
+impl<I: Iterator<Item = StdIoResult>> Iterator for CodeRead<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.peeked.take() {
+            Some(v) => v,
+            None => {
+                let res: Option<std::result::Result<u8, std::io::Error>> = self.inner.next();
+                record(&mut self.num, &mut self.line, &mut self.col, res)
+            }
+        }
+    }
+}
+
+impl<I: Iterator<Item = StdIoResult>> CodeRead<I> {
+    fn peek(&mut self) -> Option<&I::Item> {
+        self.peeked
+            .get_or_insert_with(|| {
+                let res = self.inner.next();
+                record(&mut self.num, &mut self.line, &mut self.col, res)
+            })
+            .as_ref()
+    }
 }
 
 impl<R: Read> Lex<R> {
     pub fn new(input: R) -> Self {
         Lex {
-            input: input.bytes().peekable(),
+            input: CodeRead::new(input.bytes()),
             ahead: Token::Eos,
         }
+    }
+
+    pub fn num(&self) -> usize {
+        self.input.num
+    }
+
+    pub fn line(&self) -> usize {
+        self.input.line
+    }
+
+    pub fn col(&self) -> usize {
+        self.input.col
     }
 
     pub fn peek(&mut self) -> Result<&Token> {
