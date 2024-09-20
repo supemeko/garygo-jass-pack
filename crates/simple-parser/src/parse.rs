@@ -366,7 +366,7 @@ impl<R: Read> Parse<R> {
 
         if left_type_name == right_type_name
             && left_type_name == "string"
-            && !matches!(binop, Token::Add)
+            && matches!(binop, Token::Add)
         {
             return self.do_binop(&binop, op, left, right);
         }
@@ -386,7 +386,11 @@ impl<R: Read> Parse<R> {
             return self.do_binop(&binop, op, left, right);
         }
 
-        Err("invail binop".into())
+        Err(format!(
+            "invail binop: {} {binop:?} {}",
+            left.exp_type.name, right.exp_type.name
+        )
+        .into())
     }
 
     fn binop(&mut self, binop: Token, left: Exp, right: Exp) -> Result<Exp> {
@@ -420,8 +424,8 @@ impl<R: Read> Parse<R> {
         }
 
         if matches!(binop, Token::And | Token::Or) {
-            if left.exp_type.base != BytecodeValueType::Boolean
-                || right.exp_type.base != BytecodeValueType::Boolean
+            if (left.exp_type.base != BytecodeValueType::Boolean
+                || right.exp_type.base != BytecodeValueType::Boolean)
             {
                 return Err(format!(
                     "Type error {} cannot and {}",
